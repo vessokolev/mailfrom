@@ -1,0 +1,15 @@
+[Unit]
+Description=MailFrom milter daemon
+After=syslog.target network.target
+Before=sendmail.service
+
+[Service]
+Type=simple
+User=mailfrom
+ExecStart=-/usr/local/sbin/mailfrom
+StandardOutput=syslog
+StandardError=syslog
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
