@@ -74,7 +74,7 @@ class TestMilter(lm.ForkMixin , lm.MilterProtocol):
         lm.frSsf = frSsf
         if frSsf == '0' and (frAddr != frAuthAddr):
             self.setReply('554' , '5.7.1' , 'YOU ARE TRYING TO SPOOF YOUR REAL EMAIL ADDRESS - RETURN-PATH DOES NOT MATCH MAIL-FROM')
-            self.log('ALLERT: %s' % frAuthAddr + ' is trying to change its e-mail address to %s' % frAddr)
+            self.log('ALERT: %s' % frAuthAddr + ' is trying to change its e-mail address to %s' % frAddr)
         return lm.CONTINUE
 
     @lm.noReply
@@ -89,6 +89,7 @@ class TestMilter(lm.ForkMixin , lm.MilterProtocol):
             if not lm.frSsf is None:
                 if lm.frSsf == '0' and not lm.frAuthAddr in val.lower():
                     self.setReply('554' , '5.7.1' , 'YOU ARE TRYING TO SPOOF YOUR REAL EMAIL ADDRESS - RETURN-PATH DOES NOT MATCH FROM')
+                    self.log('ALERT: %s' % frAuthAddr + ' is trying to send e-mail without "From" field')
 #        self.log('%s: %s' % (key , val))
         return lm.CONTINUE
 
