@@ -30,3 +30,6 @@ uid: user
 userpassword: {CRYPT}$6$Z0WAnZlLYWF46LP5$TDvGxuv42xnRMvYR/34RZb32UnGGbf2qv2A
 
 the content of this dn allows the user@ucc.uni-sofia.bg to send also as another.user@ucc.uni-sofia.bg and yet.another.user@ucc.uni-sofia.bg
+
+
+IMPORTANT: You have to install python-ldap module!!!

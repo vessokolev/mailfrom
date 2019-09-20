@@ -78,7 +78,7 @@ class TestMilter(lm.ForkMixin , lm.MilterProtocol):
             lm.flag = lm.frAddr in lm.additional_addresses
             if lm.frAddr != lm.frAuthAddr and not lm.flag:
                 self.setReply('554' , '5.7.1' , 'YOU ARE TRYING TO SPOOF YOUR REAL EMAIL ADDRESS - "Return-path" does not match "Mail-From"')
-                self.log('ALERT: %s' % lm.frAuthAddr + ' is trying to change hir/her e-mail address to %s' % lm.frAddr)
+                self.log('ALERT: %s' % lm.frAuthAddr + ' is trying to change his/her e-mail address to %s' % lm.frAddr)
             if lm.flag:
                 self.log('INFO: E-mail user ' + lm.frAuthAddr + ' set "Return-path" to ' + lm.frAddr + ' (allowed due to the presence of "additionlSMTPFrom" record in LDAP dn).')
            
