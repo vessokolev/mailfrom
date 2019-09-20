@@ -39,6 +39,7 @@ class TestMilter(lm.ForkMixin , lm.MilterProtocol):
         lm.frAuthAddr = ''
         lm.From = None
         lm.fsSsf = None
+        lm.flag = False
         # You can initialize more stuff here
 
     def log(self , msg):
@@ -69,12 +70,18 @@ class TestMilter(lm.ForkMixin , lm.MilterProtocol):
 
     @lm.noReply
     def mailAuthFrom(self , frAddr, frAuthAddr, frSsf , cmdDict):
-        lm.frAddr = frAddr
-        lm.frAuthAddr = frAuthAddr
+        lm.frAddr = frAddr.lower()
+        lm.frAuthAddr = frAuthAddr.lower()
         lm.frSsf = frSsf
-        if frSsf == '0' and (frAddr != frAuthAddr):
-            self.setReply('554' , '5.7.1' , 'YOU ARE TRYING TO SPOOF YOUR REAL EMAIL ADDRESS - RETURN-PATH DOES NOT MATCH MAIL-FROM')
-            self.log('ALERT: %s' % frAuthAddr + ' is trying to change its e-mail address to %s' % frAddr)
+        if frSsf == '0':
+            lm.additional_addresses = get_allowedsmtpfrom(syslog, lm.frAuthAddr)
+            lm.flag = lm.frAddr in lm.additional_addresses
+            if lm.frAddr != lm.frAuthAddr and not lm.flag:
+                self.setReply('554' , '5.7.1' , 'YOU ARE TRYING TO SPOOF YOUR REAL EMAIL ADDRESS - "Return-path" does not match "Mail-From"')
+                self.log('ALERT: %s' % lm.frAuthAddr + ' is trying to change hir/her e-mail address to %s' % lm.frAddr)
+            if lm.flag:
+                self.log('INFO: E-mail user ' + lm.frAuthAddr + ' set "Return-path" to ' + lm.frAddr + ' (allowed due to the presence of "additionlSMTPFrom" record in LDAP dn).')
+           
         return lm.CONTINUE
 
     @lm.noReply
@@ -87,17 +94,19 @@ class TestMilter(lm.ForkMixin , lm.MilterProtocol):
         if key == 'From':
             lm.From = val.lower()
             if not lm.frSsf is None:
-                if lm.frSsf == '0' and not lm.frAuthAddr in val.lower():
-                    self.setReply('554' , '5.7.1' , 'YOU ARE TRYING TO SPOOF YOUR REAL EMAIL ADDRESS - RETURN-PATH DOES NOT MATCH FROM')
-                    self.log('ALERT: %s' % frAuthAddr + ' is trying to send e-mail without "From" field')
-#        self.log('%s: %s' % (key , val))
+                if lm.frSsf == '0':
+                    if not lm.frAuthAddr in lm.From and not lm.flag:
+                        self.setReply('554' , '5.7.1' , 'YOU ARE TRYING TO SPOOF YOUR REAL EMAIL ADDRESS - "Return-path" does not match "From" header')
+                    if lm.flag:
+                        self.log('INFO: E-mail user ' + lm.frAuthAddr + ' set "From" to ' + lm.frAddr + ' (allowed due to the presence of "additionlSMTPFrom" attribute in LDAP dn).')
         return lm.CONTINUE
 
     @lm.noReply
     def eoh(self , cmdDict):
         if not lm.frSsf is None:
             if lm.frSsf == '0' and lm.From is None:
-                self.setReply('554' , '5.7.1' , 'YOU ARE TRYING TO SPOOF YOUR REAL EMAIL ADDRESS - NO FROM')
+                self.setReply('554' , '5.7.1' , 'YOU ARE TRYING TO SPOOF YOUR REAL EMAIL ADDRESS - Missing "From" header')
+#        self.log('EOH')
         return lm.CONTINUE
 
     def data(self , cmdDict):
@@ -138,6 +147,90 @@ def runTestMilter():
         traceback.print_tb(sys.exc_traceback)
         sys.exit(3)
 
+
+def get_allowedsmtpfrom(syslog, email):
+
+    import ldap
+    import os
+
+    sys.path.append('/etc/mailfrom')
+
+    import ldap_config
+
+    # We do service only e-mail users, whose dn-objects contains:
+    # uid = mailbox
+    # mail = mailbox@domain.name
+    # Get the uid and e-mail address first:
+
+    if "@" in email:
+
+        # Check if "@" is listed more than once within the "email" variable.
+        # If true, then "email" does not resemble valid e-mail address.
+        # Also, do reject the processing if the symbol "@" is first or last
+        # symbol of "email":
+
+        if email.count("@") > 1 or email.endswith("@") or email.index("@") == 0:
+            return []
+
+        else:
+
+            # Get the user "uid" attrribute valie from the box name in the
+            # "email" value, to speed up the LDAP lookup (the value of the
+            # "domain" helps to start deep in the tree, instead of traversing
+            # the entire tree):
+
+            tmp = email.split("@")
+            uid = tmp[0]
+            domain = tmp[1]
+
+        # Attempt to connect to the LDAP server:
+        try:
+            ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
+            conn = ldap.initialize(ldap_config.ldap_uri)
+            conn.set_option(ldap.OPT_REFERRALS, 0)
+            conn.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
+            conn.set_option(ldap.OPT_X_TLS,ldap.OPT_X_TLS_DEMAND)
+            conn.set_option(ldap.OPT_X_TLS_DEMAND, True )
+            conn.set_option(ldap.OPT_DEBUG_LEVEL, 255 )
+            conn.simple_bind_s(ldap_config.bind_dn, ldap_config.bind_password)
+        except ldap.LDAPError, e:
+            syslog.syslog(str(e))
+
+        # Process "baseDN", by replacing there the uid (%u) and domain name (%d).
+
+        baseDN = ldap_config.base_dn.replace("%d", domain)
+        baseDN = baseDN.replace("%u", uid)
+
+        searchFilter = "(&(&(objectclass=advancedsmtprelay)(uid=" + uid + "))(mail=" + email + "))"
+        requested_attributes = ['allowedsmtpfrom']
+
+        t = []
+
+        try:
+            ldap_result = conn.search(baseDN, ldap.SCOPE_SUBTREE, searchFilter, requested_attributes)
+            result = []
+            while True:
+                result_type, result_data = conn.result(ldap_result, 0)
+                if (result_data == []):
+                    break
+                else:
+                    if result_type == ldap.RES_SEARCH_ENTRY:
+                        result.append(result_data)
+                t = result[0][0][1]['allowedsmtpfrom']
+        except ldap.LDAPError, e:
+            syslog.syslog(str(e))
+            return []
+
+        if len(t) > 0:
+            for i in range(len(t)):
+                t[i] = t[i].lower()
+
+        return t
+
+    else:
+        syslog.syslog('Cannot process the requested e-mail address ' + email)
+        return []
+
+
 if __name__ == '__main__':
     runTestMilter()
-

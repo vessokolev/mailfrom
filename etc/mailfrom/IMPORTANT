@@ -1,0 +1,1 @@
+Do make user mailfrom and group mail ownere of ldap_config.py. Set chmod 640 ldap_config.py

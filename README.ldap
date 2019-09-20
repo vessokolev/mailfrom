@@ -1,0 +1,32 @@
+Add the following objectClasses and attributes to LDAP directory (the schema syntax bellow is the one of 389 DS):
+
+objectClasses: ( advancedSMTPRelay-oid NAME 'advancedSMTPRelay' DESC '' SUP top STRUCTURAL MAY allowedSMTPFrom X-ORIGIN 'user defined' )
+attributeTypes: ( allowedSMTPFrom-oid NAME 'allowedSMTPFrom'  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 X-ORIGIN 'user defined' )
+
+To allow some of your users to change their e-mail address in "From", you have to add the objectClass 'advancedSMTPRelay' to their LDAP dn, and decribed the alternative e-mail addresses as values of the atribute 'allowedSMTPFrom'. For example:
+
+dn: uid=user,ou=People,o=ucc.uni-sofia.bg,o=uni-sofia.bg
+allowedsmtpfrom: another.user@ucc.uni-sofia.bg
+allowedsmtpfrom: yet.another.user@ucc.uni-sofia.bg
+cn: Veselin Kolev
+domainadministrator: FALSE
+givenname: Veselin
+mail: user@ucc.uni-sofia.bg
+objectclass: top
+objectclass: inetOrgPerson
+objectclass: person
+objectclass: domainadministratorclass
+objectclass: additionalMailClass
+objectclass: organizationalPerson
+objectclass: sendmailmtamapobject
+objectclass: sendmailMTAMap
+objectclass: sendmailMTA
+objectclass: advancedsmtprelay
+sendmailmtacluster: mailbox
+sendmailmtakey: to:user@ucc.uni-sofia.bg
+sendmailmtamapname: access
+sendmailmtamapvalue: RELAY
+uid: user
+userpassword: {CRYPT}$6$Z0WAnZlLYWF46LP5$TDvGxuv42xnRMvYR/34RZb32UnGGbf2qv2A
+
+the content of this dn allows the user@ucc.uni-sofia.bg to send also as another.user@ucc.uni-sofia.bg and yet.another.user@ucc.uni-sofia.bg
